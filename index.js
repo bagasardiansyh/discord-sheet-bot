@@ -1,7 +1,10 @@
 require("dotenv").config();
-const fetch = require("node-fetch");
+const fetch = require("node-fetch"); // WAJIB v2
 const { Client, GatewayIntentBits, Partials } = require("discord.js");
 
+// ==============================
+// INIT CLIENT
+// ==============================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -12,18 +15,22 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
-client.once("ready", () => {
+// ==============================
+// READY
+// ==============================
+client.once("clientReady", () => {
   console.log(`🤖 Bot aktif sebagai ${client.user.tag}`);
 });
 
-// ==========================
-// INPUT WD / DP
-// ==========================
+// ==============================
+// HANDLE MESSAGE INPUT
+// ==============================
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
   const text = message.content;
 
+  // minimal ada Nama + WD/DP
   if (!text.includes("Nama") || (!text.includes("WD") && !text.includes("DP"))) return;
 
   const namaMatch = text.match(/Nama\s*:\s*(.+)/i);
@@ -51,35 +58,46 @@ client.on("messageCreate", async (message) => {
 
     const json = await res.json();
 
-    if (json.status === "ok") {
+    if (json.status === "inserted") {
       await message.react("📄");
     }
 
   } catch (err) {
-    console.error(err);
+    console.error("🔥 ERROR kirim ke Apps Script:", err);
     message.reply("❌ Bot gagal konek ke Spreadsheet");
   }
 });
 
-// ==========================
-// REACTION 💸 → PAID
-// ==========================
+// ==============================
+// HANDLE REACTION 💸
+// ==============================
 client.on("messageReactionAdd", async (reaction, user) => {
   if (user.bot) return;
 
   if (reaction.partial) {
-    await reaction.fetch();
+    try {
+      await reaction.fetch();
+    } catch (err) {
+      console.error("Gagal fetch reaction:", err);
+      return;
+    }
   }
 
   if (reaction.emoji.name !== "💸") return;
 
-  await fetch(process.env.APPS_SCRIPT_URL + "?action=paid", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      messageId: reaction.message.id
-    })
-  });
+  try {
+    await fetch(process.env.APPS_SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "paid",
+        messageId: reaction.message.id
+      })
+    });
+  } catch (err) {
+    console.error("🔥 ERROR update PAID:", err);
+  }
 });
 
+// ==============================
 client.login(process.env.DISCORD_TOKEN);
