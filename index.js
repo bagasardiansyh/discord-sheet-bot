@@ -1,83 +1,85 @@
-// ==============================
-// SETUP AWAL
-// ==============================
 require("dotenv").config();
-const { Client, GatewayIntentBits } = require("discord.js");
+const fetch = require("node-fetch");
+const { Client, GatewayIntentBits, Partials } = require("discord.js");
 
-// ==============================
-// INIT BOT
-// ==============================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageReactions
+  ],
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
 client.once("ready", () => {
-  console.log(`🤖 Bot siap sebagai ${client.user.tag}`);
+  console.log(`🤖 Bot aktif sebagai ${client.user.tag}`);
 });
 
-// ==============================
-// LISTEN PESAN
-// ==============================
+// ==========================
+// INPUT WD / DP
+// ==========================
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
   const text = message.content;
 
-  // hanya proses pesan yang ada Nama & WD
-  if (!text.includes("Nama") || !text.includes("WD")) return;
+  if (!text.includes("Nama") || (!text.includes("WD") && !text.includes("DP"))) return;
 
-  // ==============================
-  // PARSE FORMAT DISCORD
-  // ==============================
   const namaMatch = text.match(/Nama\s*:\s*(.+)/i);
-  const wdMatch   = text.match(/WD\s*:\s*(\d+)/i);
+  const jenisMatch = text.match(/\b(WD|DP)\b\s*:\s*(\d+)/i);
 
-  if (!namaMatch || !wdMatch) {
+  if (!namaMatch || !jenisMatch) {
     return message.reply(
-      "❌ Format salah\nGunakan:\n```\nNama : Dadang\nWD   : 50\n```"
+      "❌ Format salah!\nGunakan:\n```\nNama : Angel\nWD   : 50\nSisa : 0 P3K\n```"
     );
   }
 
   const payload = {
     nama: namaMatch[1].trim(),
-    wd: Number(wdMatch[1])
+    jenis: jenisMatch[1].toUpperCase(),
+    qty: Number(jenisMatch[2]),
+    messageId: message.id
   };
 
-  console.log("📤 Kirim ke Apps Script:", payload);
-
-  // ==============================
-  // KIRIM KE APPS SCRIPT
-  // ==============================
   try {
     const res = await fetch(process.env.APPS_SCRIPT_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
 
-    // ⬅️ FIX UTAMA ADA DI SINI (PAKAI JSON)
     const json = await res.json();
-    console.log("📥 Response Apps Script:", json);
 
     if (json.status === "ok") {
-      message.reply("✅ Data masuk ke spreadsheet");
-    } else {
-      message.reply("❌ Apps Script error");
+      await message.react("📄");
     }
 
   } catch (err) {
-    console.error("🔥 ERROR:", err);
-    message.reply("❌ Bot gagal konek ke spreadsheet");
+    console.error(err);
+    message.reply("❌ Bot gagal konek ke Spreadsheet");
   }
 });
 
-// ==============================
-// LOGIN
-// ==============================
+// ==========================
+// REACTION 💸 → PAID
+// ==========================
+client.on("messageReactionAdd", async (reaction, user) => {
+  if (user.bot) return;
+
+  if (reaction.partial) {
+    await reaction.fetch();
+  }
+
+  if (reaction.emoji.name !== "💸") return;
+
+  await fetch(process.env.APPS_SCRIPT_URL + "?action=paid", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messageId: reaction.message.id
+    })
+  });
+});
+
 client.login(process.env.DISCORD_TOKEN);
